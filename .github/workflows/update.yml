@@ -1,0 +1,63 @@
+name: update
+
+# Fetch fresh NSE data and publish the terminal.
+# Runs on its own every evening after NSE publishes its end-of-day files, again
+# later in the evening in case files were late, once each morning (shareholding
+# filings, weekends), and whenever you press "Run workflow" or the site's
+# "Update from NSE" button.
+on:
+  schedule:
+    - cron: "40 12 * * 1-5"   # 18:10 IST
+    - cron: "50 13 * * 1-5"   # 19:20 IST
+    - cron: "20 15 * * 1-5"   # 20:50 IST
+    - cron: "15 2 * * *"      # 07:45 IST every day
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: update
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Restore downloaded NSE files
+        uses: actions/cache@v4
+        with:
+          path: .cache
+          key: nse-${{ github.run_id }}
+          restore-keys: nse-
+
+      - name: Fetch and compute
+        env:
+          SHP_BUDGET_S: "1200"
+        run: python pipeline/update.py
+
+      - name: Save collected history (deals, FII/DII, shareholding)
+        run: |
+          git config user.name "terminal-bot"
+          git config user.email "terminal-bot@users.noreply.github.com"
+          git add state
+          if git diff --cached --quiet; then echo "no history changes"; else git commit -m "data: $(date -u +%F)" && git push; fi
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - id: deploy
+        uses: actions/deploy-pages@v4
