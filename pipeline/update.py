@@ -791,6 +791,19 @@ def main():
     save_json(os.path.join(OUT, "deals.json"), deals[:4000])
     save_json(os.path.join(OUT, "ownership.json"), own)
     save_json(os.path.join(OUT, "meta.json"), meta, pretty=True)
+    # a plain CSV of every stock, kept in the repo so it can be downloaded or pulled into a spreadsheet
+    os.makedirs(os.path.join(STATE, "export"), exist_ok=True)
+    cols = ["sym", "n", "i", "s", "px", "r1", "r5", "r15", "r1m", "r3m", "r6m", "r1y", "mom", "rs3m", "vr", "dp", "fhi",
+            "rsi", "a50", "a200", "prom", "dprom", "fpi", "dfpi", "mf", "dmf", "dii", "pledge"]
+    head = ["Symbol", "Company", "Index", "Sector", "Close", "1D %", "5D %", "15D %", "1M %", "3M %", "6M %", "1Y %",
+            "Momentum", "RS 3M", "Vol x 20D", "Delivery %", "From 52W high %", "RSI", "Above 50DMA", "Above 200DMA",
+            "Promoter %", "Promoter chg pp", "FPI %", "FPI chg pp", "MF %", "MF chg pp", "DII %", "Pledge %"]
+    with open(os.path.join(STATE, "export", "stocks.csv"), "w", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(["As of " + dates[0].isoformat()] + [""] * (len(head) - 1))
+        w.writerow(head)
+        for s_ in sorted(stocks, key=lambda x: (x["i"], x["sym"])):
+            w.writerow([{"S": "Smallcap 250", "M": "Microcap 250"}[s_["i"]] if k == "i" else s_.get(k) for k in cols])
     log("done in %ds: data as of %s" % (time.time() - t0, dates[0]))
 
 
