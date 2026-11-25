@@ -38,3 +38,10 @@ so it opens in any browser on any device with no software installed.
 * For information only; not investment advice.
 
 Run locally: `python3 pipeline/update.py` then `python3 -m http.server -d site` and open http://localhost:8000.
+
+## Jarvis layer (voice, briefing, news)
+
+- **Briefing** opens on every load, refresh and new data: biggest moves, volume shocks, largest bulk/block deals, FII/DII cash, breadth, 52-week extremes, institutional stake builds and top headlines. "Read it to me" speaks it.
+- **Voice**: click the reactor or press `J` (Chrome, Edge or Safari; allow the microphone). Tick *Wake word* to keep it listening for "Jarvis …". Examples: "briefing", "open smart money", "show Jupiter Wagons", "chart KFINTECH", "microcap five day top gainers", "who is buying Thomas Cook", "news about railways", "policy news", "show breakouts", "refresh", "update from NSE".
+- **Command bar**: `Ctrl+K` or `/` to type the same commands or jump to a stock.
+- **News wire**: `news.yml` runs every 5 minutes, collecting market, company, policy (RBI, SEBI, PIB) and fund-flow headlines plus NSE filings for the 500 stocks, tagged by category, tone and stock. It is published to the `news` branch and the page reloads it every 5 minutes.

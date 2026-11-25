@@ -3,29 +3,43 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Smallcap & Microcap Terminal</title>
+<title>J.A.R.V.I.S. · Smallcap & Microcap Terminal</title>
 <meta name="robots" content="noindex">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;800&family=Rajdhani:wght@500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 </head>
 <body>
+<div class="bg-grid"></div><div class="bg-glow"></div><div class="scan"></div>
+
+<div id="boot" class="boot">
+  <div class="reactor big"><i></i><i></i><i></i><b></b></div>
+  <div class="boot-t">J.A.R.V.I.S.</div>
+  <div class="boot-s" id="bootLine">Initialising market systems…</div>
+</div>
+
 <header class="topbar">
-  <div class="brand"><span class="logo">▌</span>SMALLCAP &amp; MICROCAP TERMINAL</div>
+  <button id="orb" class="reactor" title="Talk to Jarvis (or press J)"><i></i><i></i><i></i><b></b></button>
+  <div class="brand"><span>J.A.R.V.I.S.</span><small>Smallcap &amp; Microcap Intelligence Terminal</small></div>
   <div class="status" id="status">Loading…</div>
   <div class="controls">
+    <button id="btnCmd" class="btn ghost" title="Command bar (Ctrl+K or /)">⌘ Command</button>
+    <label class="auto" title="Listen for the word 'Jarvis' continuously"><input type="checkbox" id="wakeChk"> Wake word</label>
     <label class="auto"><input type="checkbox" id="autoChk" checked> Auto-refresh <span id="countdown"></span></label>
-    <button id="btnReload" class="btn" title="Load the latest published data now">⟳ Refresh</button>
+    <button id="btnReload" class="btn" title="Load the latest published data and open the briefing">⟳ Refresh</button>
     <button id="btnUpdate" class="btn accent" title="Ask GitHub to fetch fresh NSE data right now">⚡ Update from NSE</button>
     <button id="btnSettings" class="btn ghost" title="Settings">⚙</button>
   </div>
 </header>
+<div class="ticker"><div class="ticker-l">LIVE</div><div class="ticker-w"><div class="ticker-t" id="ticker">Connecting to news feeds…</div></div></div>
 
 <div class="app">
 <main>
   <nav class="tabs" id="tabs">
-    <button data-t="pulse" class="on">Market Pulse</button>
+    <button data-t="brief" class="on">◆ Briefing</button>
+    <button data-t="news">News Wire</button>
+    <button data-t="pulse">Market Pulse</button>
     <button data-t="movers">Movers</button>
     <button data-t="sectors">Sector Rotation</button>
     <button data-t="smart">Smart Money</button>
@@ -39,7 +53,9 @@
     <div class="seg" id="segPer"><button data-v="r1" class="on">1D</button><button data-v="r5">5D</button><button data-v="r15">15D</button><button data-v="r1m">1M</button><button data-v="r3m">3M</button><button data-v="r6m">6M</button><button data-v="r1y">1Y</button></div>
   </div>
 
-  <section id="v-pulse" class="view on"></section>
+  <section id="v-brief" class="view on"></section>
+  <section id="v-news" class="view"></section>
+  <section id="v-pulse" class="view"></section>
   <section id="v-movers" class="view"></section>
   <section id="v-sectors" class="view"></section>
   <section id="v-smart" class="view"></section>
@@ -69,17 +85,38 @@
 </aside>
 </div>
 
+<!-- voice HUD -->
+<div id="hud" class="hud hidden">
+  <div class="reactor mid listening"><i></i><i></i><i></i><b></b></div>
+  <div class="hud-state" id="hudState">Listening…</div>
+  <div class="hud-heard" id="hudHeard"></div>
+  <div class="hud-reply" id="hudReply"></div>
+  <div class="hud-tips">Try: “briefing” · “open smart money” · “show Jupiter Wagons” · “chart KFINTECH” · “microcap five day top gainers” · “who is buying Nippon” · “latest news on railways” · “refresh”</div>
+</div>
+
+<!-- command palette -->
+<div id="palette" class="modal hidden">
+  <div class="pbox">
+    <input id="pIn" placeholder="Type a command or a stock… (e.g. open ownership, show IRCON, screen breakouts)" autocomplete="off">
+    <div id="pList"></div>
+    <div class="phint">Enter to run · Esc to close · press J or click the reactor to speak</div>
+  </div>
+</div>
+
 <div id="modal" class="modal hidden">
   <div class="mbox">
-    <h3>Update from NSE</h3>
-    <p>The site refreshes itself every evening after NSE publishes its files, and checks for new data every few minutes while open. To fetch fresh data on demand, this button asks GitHub to run the update job, which takes about 3–5 minutes.</p>
-    <p>That needs a GitHub token saved <b>in this browser only</b>. Create a fine-grained token with access to just this repository and the permission <b>Actions: Read and write</b>, then paste it below. Without a token, the button opens the job's page on GitHub, where you can press "Run workflow" yourself.</p>
-    <label>Repository (owner/name)<input id="setRepo" placeholder="your-github-name/nse-terminal"></label>
+    <h3>Settings</h3>
+    <p>The terminal refreshes itself every evening after NSE publishes its files and checks for new data every 5 minutes while open. News refreshes every 5 minutes. <b>⚡ Update from NSE</b> asks GitHub to run the data job now (3–5 minutes).</p>
+    <p>For one-click updates, paste a fine-grained GitHub token with access to just this repository and the permission <b>Actions: Read and write</b>. It is saved <b>in this browser only</b>. Without it, the button opens the job on GitHub where you press "Run workflow".</p>
+    <label>Repository (owner/name)<input id="setRepo" placeholder="ntacostar/nse-terminal"></label>
     <label>GitHub token<input id="setTok" type="password" placeholder="github_pat_…"></label>
+    <label class="row"><input type="checkbox" id="setVoice" checked> Jarvis speaks replies aloud</label>
+    <label class="row"><input type="checkbox" id="setBoot" checked> Show briefing on every refresh</label>
     <div class="mrow"><button class="btn accent" id="setSave">Save</button><button class="btn ghost" id="setClear">Forget token</button><button class="btn ghost" id="setClose">Close</button></div>
   </div>
 </div>
 <div id="toast" class="toast hidden"></div>
 <script src="app.js"></script>
+<script src="jarvis.js"></script>
 </body>
 </html>

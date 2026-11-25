@@ -24,9 +24,9 @@ FEEDS = [
     ("Economic Times", "Markets", "https://economictimes.indiatimes.com/markets/rssfeeds/1977021501.cms"),
     ("Economic Times", "Stocks", "https://economictimes.indiatimes.com/markets/stocks/rssfeeds/2146842.cms"),
     ("Economic Times", "Economy", "https://economictimes.indiatimes.com/news/economy/rssfeeds/1373380680.cms"),
-    ("Moneycontrol", "Markets", "https://www.moneycontrol.com/rss/marketreports.xml"),
-    ("Moneycontrol", "Business", "https://www.moneycontrol.com/rss/business.xml"),
-    ("Moneycontrol", "Latest", "https://www.moneycontrol.com/rss/latestnews.xml"),
+    ("Financial Express", "Markets", "https://www.financialexpress.com/market/feed/"),
+    ("Financial Express", "Economy", "https://www.financialexpress.com/economy/feed/"),
+    ("NDTV Profit", "Latest", "https://feeds.feedburner.com/ndtvprofit-latest"),
     ("Mint", "Markets", "https://www.livemint.com/rss/markets"),
     ("Mint", "Companies", "https://www.livemint.com/rss/companies"),
     ("Business Standard", "Markets", "https://www.business-standard.com/rss/markets-106.rss"),
@@ -47,10 +47,10 @@ CATS = [
     ("Global", r"\bFed\b|US |Wall Street|China|global|crude|Brent|dollar|Treasury|Europe|Japan|geopolit"),
     ("Markets", r"Sensex|Nifty|market|smallcap|midcap|rupee|stocks? to (buy|watch)|gainers|losers|rally|sell-?off"),
 ]
-POS = r"surge|soar|jump|rall(y|ies)|gain|rise|rises|climb|record high|wins|bags|upgrade|beats|approval|boost|" \
-      r"strong|robust|buy\b|bullish|outperform|top gainer|hits 52-week high|upper circuit|order win|raises stake|hikes stake"
-NEG = r"fall|falls|slump|plunge|crash|tumble|slide|decline|drop|cut\b|downgrade|probe|penalty|fine\b|loss|weak|miss|" \
-      r"sell-?off|bearish|underperform|raid|default|resign|exit|lower circuit|52-week low|ban\b|pledge|offload|trims stake"
+POS = r"\b(?:surge|soar|jump|rall(y|ies)|gain|rise|rises|climb|record high|wins|bags|upgrade|beats|approval|boost|" \
+      r"strong|robust|buy\b|bullish|outperform|top gainer|hits 52-week high|upper circuit|order win|raises stake|hikes stake)"
+NEG = r"\b(?:fall|falls|slump|plunge|crash|tumble|slide|decline|drop|cut\b|downgrade|probe|penalty|fine\b|loss|weak|miss|" \
+      r"sell-?off|bearish|underperform|raid|default|resign|exit|lower circuit|52-week low|ban\b|pledge|offload|trims stake)"
 STOP_SYMS = {"STAR", "CLEAN", "RAIN", "GLAND", "SAFARI", "TIMEX", "CERA", "QUESS", "ROUTE", "SKIPPER", "SUBROS",
              "ACE", "TI", "SIS", "NCC", "BLS", "EPL", "FSL", "IGL", "IEX", "KEC", "KSB", "MGL", "PTC", "RBA", "SCI",
              "AVL", "OMNI", "TARC", "ICIL", "APOLLO", "CENTUM", "MOIL", "MMTC", "IFCI", "IDBI", "NAVA", "ATUL", "CESC"}
@@ -109,19 +109,29 @@ def read_feed(src, sec, url):
 
 def universe():
     path = os.path.join(ROOT, "state", "export", "stocks.csv")
-    out = []
     try:
         rows = list(csv.reader(open(path, encoding="utf-8")))[2:]
     except FileNotFoundError:
-        return out
+        return []
+    def core_of(name):
+        c = re.sub(GENERIC, " ", name, flags=re.I)
+        c = re.sub(r"[^A-Za-z0-9&' ]", " ", c)
+        return re.sub(r"\s+", " ", c).strip()
+    cores = {r[0]: core_of(r[1]) for r in rows}
+    first = {}
+    for c in cores.values():
+        if c:
+            first[c.split()[0].lower()] = first.get(c.split()[0].lower(), 0) + 1
+    out = []
     for r in rows:
         sym, name, idx = r[0], r[1], r[2]
-        core = re.sub(GENERIC, " ", name, flags=re.I)
-        core = re.sub(r"[^A-Za-z0-9&' ]", " ", core)
-        core = re.sub(r"\s+", " ", core).strip()
+        core = cores[sym]
+        if core and first.get(core.split()[0].lower(), 0) > 1:
+            core = re.sub(r"\s+(Ltd\.?|Limited)$", "", name)      # e.g. Welspun Corp vs Welspun Living
         pats = []
-        if len(core) >= 5:
-            pats.append(re.compile(r"\b" + re.escape(core) + r"\b", re.I))
+        words = core.split()
+        if (len(words) >= 2 and len(core) >= 6) or (len(words) == 1 and len(core) >= 6):
+            pats.append(re.compile(r"\b" + re.escape(core) + r"\b"))   # case-sensitive: names are capitalised
         if len(sym) >= 5 and sym not in STOP_SYMS and sym.isalpha():
             pats.append(re.compile(r"\b" + re.escape(sym) + r"\b"))
         if pats:
@@ -136,6 +146,12 @@ def tag(item, uni):
     if item["src"] in ("RBI", "SEBI", "PIB"):
         cat = "Policy"
     pos, neg = len(re.findall(POS, item["t"], re.I)), len(re.findall(NEG, item["t"], re.I))
+    mv_up = re.search(r"\b(up|rise[sn]?|jump(s|ed)?|climb(s|ed)?|gain(s|ed)?|surge[sd]?|rall(y|ies|ied)|soar(s|ed)?|zoom(s|ed)?)\s+(over\s+|nearly\s+|about\s+)?\d+(\.\d+)?\s?%", item["t"], re.I)
+    mv_dn = re.search(r"\b(down|fall(s|en)?|fell|drop(s|ped)?|slump(s|ed)?|crash(es|ed)?|plunge[sd]?|tumble[sd]?|sink(s)?|sank|slide[sd]?|tank(s|ed)?)\s+(over\s+|nearly\s+|about\s+)?\d+(\.\d+)?\s?%", item["t"], re.I)
+    if mv_up and not mv_dn:
+        pos += 2
+    elif mv_dn and not mv_up:
+        neg += 2
     tone = "pos" if pos > neg else "neg" if neg > pos else "neu"
     syms = []
     for sym, ix, pats in uni:
@@ -171,7 +187,11 @@ def nse_announcements(uni_syms):
         out.append({"t": "%s: %s" % (sym, desc), "s": body[:300], "u": x.get("attchmntFile") or
                     "https://www.nseindia.com/companies-listing/corporate-filings-announcements",
                     "d": parse_date(x.get("an_dt") or x.get("sort_date")), "src": "NSE filing", "sec": "Announcements",
-                    "c": "Corporate", "tone": "neu", "sy": [[sym, uni_syms[sym]]], "imp": 3})
+                    "c": "Results" if re.search(r"financial result|results", desc, re.I) else "Corporate",
+                    "tone": "neu", "sy": [[sym, uni_syms[sym]]],
+                    "imp": 4 if re.search(r"result|outcome of board|acquisition|award|order|bagging|merger|"
+                                          r"scheme of arrangement|fund raising|preferential|QIP|buyback|bonus|split",
+                                          desc, re.I) else 2})
     return out, None
 
 
@@ -184,7 +204,7 @@ def main():
     for src, sec, its, err in res:
         status.append({"src": src, "sec": sec, "n": len(its), "err": err})
         for it in its:
-            if not it["t"] or not it["u"]:
+            if not it["t"] or not it["u"] or re.search("[\u0900-\u0DFF]", it["t"]):   # English only
                 continue
             it.update({"src": src, "sec": sec})
             items.append(tag(it, uni))
@@ -200,7 +220,15 @@ def main():
             prev = []
     seen, merged = set(), []
     cutoff = NOW - dt.timedelta(days=3)
-    for it in items + [dict(p, d=parse_date(p.get("d"))) for p in prev]:
+    old = []
+    for p in prev:                      # re-tag older items so tagging fixes apply to them too
+        p = dict(p, d=parse_date(p.get("d")))
+        if p.get("src") != "NSE filing" and not re.search("[\u0900-\u0DFF]", p.get("t") or ""):
+            p = tag(p, uni)
+        elif p.get("src") != "NSE filing":
+            continue
+        old.append(p)
+    for it in items + old:
         key = re.sub(r"\W+", "", (it["t"] or "").lower())[:90]
         if key in seen:
             continue

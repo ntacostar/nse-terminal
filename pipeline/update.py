@@ -308,13 +308,17 @@ def ret_n(c, n):
 
 
 # ------------------------------------------------------------------------------------------ deals
-INST = [("MF", r"MUTUAL FUND|\bMF\b|ASSET MANAGEMENT|\bAMC\b|TRUSTEE"),
+AMC_RE = (r"\b(NIPPON INDIA|HDFC|SBI|ICICI PRUDENTIAL|KOTAK MAHINDRA|AXIS|UTI|MIRAE ASSET|DSP|TATA|ADITYA BIRLA SUN LIFE|"
+          r"FRANKLIN|INVESCO|EDELWEISS|MOTILAL OSWAL|QUANT|BANDHAN|CANARA ROBECO|WHITEOAK|HSBC|SUNDARAM|BARODA BNP|"
+          r"360 ONE|HELIOS|JM|ITI|NAVI|UNION|BAJAJ FINSERV|SAMCO|OLD BRIDGE|PPFAS|MAHINDRA MANULIFE|LIC)\b.*"
+          r"\b(FUND|SCHEME|EF|ETF|PLAN|UNIT TRUST)\b")
+INST = [("MF", r"MUTUAL FUND|\bMF\b|ASSET MANAGEMENT|\bAMC\b|TRUSTEE|UNIT TRUST OF INDIA|(?!.*IFSC)" + AMC_RE),
         ("Insurance", r"INSURANCE|ASSURANCE|\bLIC\b|LIFE "),
         ("FPI/Foreign fund", r"\bFUND\b|FUNDS|SICAV|\bPLC\b|\bLLC\b|\bL\.?P\.?\b|PTE|MAURITIUS|SINGAPORE|CAYMAN|"
                              r"MASTER|PORTFOLIO|SECURITIES INVESTMENT|INVESTMENT TRUST|GOLDMAN|MORGAN STANLEY|"
                              r"CITIGROUP|BNP|SOCIETE|NOMURA|JP ?MORGAN|BOFA|MERRILL|VANGUARD|BLACKROCK|ABU DHABI|"
-                             r"GOVERNMENT OF|NORGES|SOVEREIGN|ELARA|NEXPACT|VIKASA|ALTEA|SAINT CAPITAL"),
-        ("AIF/PMS", r"ALTERNATIVE INVESTMENT|\bAIF\b|OPPORTUNITIES|CATEGORY III|PMS"),
+                             r"GOVERNMENT OF|NORGES|SOVEREIGN|INVESTMENT AUTHORITY|MONETARY AUTHORITY|PENSION|SUPERANNUATION|ENDOWMENT|IFSC|ELARA|NEXPACT|VIKASA|ALTEA|SAINT CAPITAL"),
+        ("AIF/PMS", r"SERIES [IVX0-9]+\b|ALTERNATIVE INVESTMENT|\bAIF\b|OPPORTUNITIES|CATEGORY III|PMS"),
         ("Bank/NBFC", r"BANK\b|FINANCE LIMITED|FINANCIAL SERVICES|FINVEST|CAPITAL LIMITED"),
         ("Broker/Prop", r"SECURITIES|BROKING|STOCK BROKING|SHARE BROKERS|CAPITAL MARKETS|COMMODITIES|"
                         r"TRADING|PROPRIETARY|GRAVITON|QE SECURITIES|HRTI|JUNOMONETA|MICROCURVES|IRAGE|"
@@ -325,7 +329,11 @@ def classify(name):
     u = name.upper()
     if re.search(INST[5][1], u):
         return "Broker/Prop"
-    for k, pat in INST[:5]:
+    if re.search(INST[0][1], u):
+        return "MF"
+    if re.search(r"SERIES [IVX0-9]+\b|\bAIF\b|ALTERNATIVE INVESTMENT|CATEGORY III", u):
+        return "AIF/PMS"
+    for k, pat in INST[1:5]:
         if re.search(pat, u):
             return k
     if re.search(r"\bHUF\b", u) or (len(u.split()) <= 4 and not re.search(r"LIMITED|LTD|LLP|PRIVATE|PVT|TRUST", u)):
@@ -336,6 +344,8 @@ def classify(name):
 def update_deals(univ):
     path = os.path.join(STATE, "deals.json")
     st = load_json(path, {"rows": []})
+    for x in st["rows"]:                       # re-apply the latest classification rules to history
+        x["cat"] = classify(x["who"])
     have = {(x["d"], x["sym"], x["who"], x["side"], x["qty"], x["px"], x["t"]) for x in st["rows"]}
     added = 0
     for kind in ("bulk", "block"):

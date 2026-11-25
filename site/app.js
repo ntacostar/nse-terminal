@@ -1,7 +1,7 @@
 /* Smallcap & Microcap Terminal — front end. Reads data/*.json written by pipeline/update.py. */
 'use strict';
 let S = [], MK = {}, DL = [], OWN = {}, META = {};
-const st = { idx: 'S', per: 'r1', view: 'pulse', sel: null, screen: 'mom', dealScope: 'U', dealSide: '', dealCat: '', dealQ: '', ownSort: { k: 'dmf', d: -1 }, ownQ: '' };
+const st = { idx: 'S', per: 'r1', view: 'brief', sel: null, screen: 'mom', dealScope: 'U', dealSide: '', dealCat: '', dealQ: '', ownSort: { k: 'dmf', d: -1 }, ownQ: '' };
 const PER = { r1: '1-day', r5: '5-day', r15: '15-day', r1m: '1-month', r3m: '3-month', r6m: '6-month', r1y: '1-year' };
 const SCALE = { r1: 6, r5: 12, r15: 20, r1m: 25, r3m: 40, r6m: 60, r1y: 80 };
 const PAL = ['#3b82f6', '#f5a524', '#22c55e', '#ef4444', '#a855f7', '#06b6d4', '#ec4899', '#84cc16', '#f97316', '#14b8a6', '#eab308', '#8b5cf6', '#64748b'];
@@ -78,6 +78,7 @@ async function loadAll(quiet) {
     fillSec(); renderStatus(); renderAll(); renderTerm();
     if (st.sel) select(st.sel, false); else { const top = uni().filter(r => r.r1 != null).sort((a, b) => b.r1 - a.r1)[0]; if (top) select(top.sym, false); }
     if (fresh && !quiet) toast(`New data loaded: as of ${fdate(META.asof)}`);
+    if (window.onDataLoaded) onDataLoaded({ fresh, quiet });
   } catch (e) {
     $('#status').innerHTML = `<span class="stale">Could not load data (${esc(e.message)}). Try Refresh in a minute.</span>`;
   }
@@ -102,7 +103,7 @@ setInterval(() => {
   if ($('#autoChk').checked && left <= 0) poll();
 }, 1000);
 document.addEventListener('visibilitychange', () => { if (!document.hidden && $('#autoChk').checked) poll(); });
-$('#btnReload').onclick = async () => { $('#btnReload').disabled = true; await loadAll(); $('#btnReload').disabled = false; nextPoll = Date.now() + POLL_MS; toast('Showing the latest published data.'); };
+$('#btnReload').onclick = async () => { $('#btnReload').disabled = true; await Promise.all([loadAll(true), window.loadNews ? loadNews() : null]); $('#btnReload').disabled = false; nextPoll = Date.now() + POLL_MS; if (window.showBriefing) showBriefing(true); toast('Showing the latest published data.'); };
 
 // on-demand update through GitHub Actions
 function repoGuess() {
@@ -142,7 +143,7 @@ document.querySelectorAll('#tabs button').forEach(b => b.onclick = () => {
   document.querySelectorAll('.view').forEach(v => v.classList.remove('on')); $('#v-' + b.dataset.t).classList.add('on');
   st.view = b.dataset.t; renderAll(); try { history.replaceState(null, '', '#' + st.view); } catch (e) { }
 });
-function renderAll() { ({ pulse: renderPulse, movers: renderMovers, sectors: renderSectors, smart: renderSmart, own: renderOwn, screens: renderScreens })[st.view](); }
+function renderAll() { ({ brief: renderBrief, news: renderNews, pulse: renderPulse, movers: renderMovers, sectors: renderSectors, smart: renderSmart, own: renderOwn, screens: renderScreens })[st.view](); }
 
 // ------------------------------------------------------------------ MARKET PULSE
 function renderPulse() {
@@ -193,19 +194,19 @@ function renderPulse() {
     <li>${h.nh ?? 0} stocks made a new 52-week high today versus ${h.nl ?? 0} new lows.</li></ul>`;
 
   // charts
-  const ser = [['Nifty 50', '#e6edf3'], ['Nifty Midcap 150', '#3b82f6'], ['Nifty Smallcap 250', '#f5a524'], ['Nifty Microcap 250', '#a855f7']];
+  const ser = [['Nifty 50', '#bfe9f7'], ['Nifty Midcap 150', '#3b82f6'], ['Nifty Smallcap 250', '#f5a524'], ['Nifty Microcap 250', '#a855f7']];
   const base = ix('Nifty 50').series || [];
   mk('cPerf', { type: 'line', data: { labels: base.map(x => x[0]), datasets: ser.map(([n, c]) => { const s = ix(n).series || []; const m = new Map(s.map(x => [x[0], x[1]])); const b0 = s.length ? s[0][1] : 1; return { label: n.replace('Nifty Midcap', 'Midcap').replace('Nifty Smallcap', 'Smallcap').replace('Nifty Microcap', 'Microcap'), data: base.map(x => m.has(x[0]) ? +(m.get(x[0]) / b0 * 100).toFixed(2) : null), borderColor: c, pointRadius: 0, borderWidth: 1.6, tension: .15, spanGaps: true }; }) },
-    options: { maintainAspectRatio: false, interaction: { mode: 'index', intersect: false }, plugins: { legend: { labels: { boxWidth: 10, color: '#e6edf3' } } }, scales: { x: { ticks: { maxTicksLimit: 8 }, grid: { display: false } }, y: { grid: { color: '#1b2532' } } } } });
+    options: { maintainAspectRatio: false, interaction: { mode: 'index', intersect: false }, plugins: { legend: { labels: { boxWidth: 10, color: '#bfe9f7' } } }, scales: { x: { ticks: { maxTicksLimit: 8 }, grid: { display: false } }, y: { grid: { color: '#0f2a3a' } } } } });
   mk('cBreadth', { type: 'line', data: { labels: br.map(b => b.d), datasets: [{ label: 'Smallcap 250', data: br.map(b => b.S && b.S.a50), borderColor: '#f5a524', pointRadius: 0, borderWidth: 1.6 }, { label: 'Microcap 250', data: br.map(b => b.M && b.M.a50), borderColor: '#a855f7', pointRadius: 0, borderWidth: 1.6 }] },
-    options: { maintainAspectRatio: false, interaction: { mode: 'index', intersect: false }, plugins: { legend: { labels: { boxWidth: 10, color: '#e6edf3' } } }, scales: { x: { ticks: { maxTicksLimit: 8 }, grid: { display: false } }, y: { min: 0, max: 100, ticks: pctTick, grid: { color: c => [20, 60].includes(c.tick.value) ? '#4b5b70' : '#1b2532' } } } } });
+    options: { maintainAspectRatio: false, interaction: { mode: 'index', intersect: false }, plugins: { legend: { labels: { boxWidth: 10, color: '#bfe9f7' } } }, scales: { x: { ticks: { maxTicksLimit: 8 }, grid: { display: false } }, y: { min: 0, max: 100, ticks: pctTick, grid: { color: c => [20, 60].includes(c.tick.value) ? '#4b5b70' : '#0f2a3a' } } } } });
   const pr = poi.slice().reverse();
   const lpc = (p, k) => p[k] ? +(p[k].fil / (p[k].fil + p[k].fis) * 100).toFixed(1) : null;
   mk('cPoi', { type: 'line', data: { labels: pr.map(p => p.d), datasets: [['FII', '#3b82f6'], ['Client', '#f5a524'], ['Pro', '#22c55e'], ['DII', '#a855f7']].map(([k, c]) => ({ label: k, data: pr.map(p => lpc(p, k)), borderColor: c, pointRadius: 0, borderWidth: k === 'FII' ? 2.4 : 1.3 })) },
-    options: { maintainAspectRatio: false, interaction: { mode: 'index', intersect: false }, plugins: { legend: { labels: { boxWidth: 10, color: '#e6edf3' } } }, scales: { x: { ticks: { maxTicksLimit: 8 }, grid: { display: false } }, y: { min: 0, max: 100, ticks: pctTick, grid: { color: '#1b2532' } } } } });
+    options: { maintainAspectRatio: false, interaction: { mode: 'index', intersect: false }, plugins: { legend: { labels: { boxWidth: 10, color: '#bfe9f7' } } }, scales: { x: { ticks: { maxTicksLimit: 8 }, grid: { display: false } }, y: { min: 0, max: 100, ticks: pctTick, grid: { color: '#0f2a3a' } } } } });
   const fl = (MK.fiidii || []).slice(0, 60).reverse();
   mk('cFlows', { type: 'bar', data: { labels: fl.map(x => x.d), datasets: [{ label: 'FII/FPI', data: fl.map(x => x.FII && x.FII.net), backgroundColor: '#3b82f6' }, { label: 'DII', data: fl.map(x => x.DII && x.DII.net), backgroundColor: '#f5a524' }] },
-    options: { maintainAspectRatio: false, plugins: { legend: { labels: { boxWidth: 10, color: '#e6edf3' } } }, scales: { x: { grid: { display: false } }, y: { grid: { color: '#1b2532' } } } } });
+    options: { maintainAspectRatio: false, plugins: { legend: { labels: { boxWidth: 10, color: '#bfe9f7' } } }, scales: { x: { grid: { display: false } }, y: { grid: { color: '#0f2a3a' } } } } });
   const idxRows = (MK.indices || []).filter(x => x.name !== 'India VIX');
   const hc = (k, sc_) => (v) => `" style="background:${heat(v, sc_)}`;
   table($('#tIdxs'), [{ k: 'name', h: 'Index', l: 1 }, { k: 'last', h: 'Close', f: v => fnum(v, 1) },
@@ -251,31 +252,31 @@ function renderMovers() {
   <div class="card"><h2>Every stock, by sector</h2><div class="d">Each tile is a stock, coloured by ${P} return. Sectors ordered by median. Click a tile to open it in the terminal.</div><div class="heat" id="heatmap"></div></div>`;
   const bar = (list, col) => ({ type: 'bar', data: { labels: list.map(r => r.sym), datasets: [{ data: list.map(r => r[k]), backgroundColor: col, borderRadius: 3, barThickness: 13 }] },
     options: { indexAxis: 'y', maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { title: i => list[i[0].dataIndex].n, label: i => `${fmt(i.raw)} · ${list[i.dataIndex].s}` } } },
-      scales: { x: { ticks: pctTick, grid: { color: '#1b2532' } }, y: { ticks: { font: { family: "'IBM Plex Mono'" }, color: '#e6edf3' }, grid: { display: false } } }, onClick: (e, els) => { if (els.length) select(list[els[0].index].sym, true); } } });
+      scales: { x: { ticks: pctTick, grid: { color: '#0f2a3a' } }, y: { ticks: { font: { family: "'IBM Plex Mono'" }, color: '#bfe9f7' }, grid: { display: false } } }, onClick: (e, els) => { if (els.length) select(list[els[0].index].sym, true); } } });
   mk('cTop', bar(sorted.slice(0, 15), '#22c55e')); mk('cBot', bar(sorted.slice(-15).reverse(), '#ef4444'));
   const pie = (key, total) => { const arr = rows.map(r => [r.sec, r[key]]).filter(x => x[1] > 0).sort((a, b) => b[1] - a[1]); const h = arr.slice(0, 9); const rest = arr.slice(9).reduce((s, x) => s + x[1], 0); if (rest) h.push(['Other', rest]);
     return { type: 'doughnut', data: { labels: h.map(x => x[0]), datasets: [{ data: h.map(x => x[1]), backgroundColor: h.map(x => x[0] === 'Other' ? '#475569' : SECCOL[x[0]]), borderColor: '#111821', borderWidth: 2 }] },
-      options: { maintainAspectRatio: false, cutout: '55%', plugins: { legend: { position: 'right', labels: { boxWidth: 10, color: '#e6edf3', generateLabels: ch => ch.data.labels.map((l, i) => ({ text: `${l}  ${(ch.data.datasets[0].data[i] / total * 100).toFixed(0)}%`, fillStyle: ch.data.datasets[0].backgroundColor[i], strokeStyle: ch.data.datasets[0].backgroundColor[i], fontColor: '#e6edf3', index: i })) } }, tooltip: { callbacks: { label: i => `${i.label}: ${i.raw} (${(i.raw / total * 100).toFixed(1)}%)` } } } } }; };
+      options: { maintainAspectRatio: false, cutout: '55%', plugins: { legend: { position: 'right', labels: { boxWidth: 10, color: '#bfe9f7', generateLabels: ch => ch.data.labels.map((l, i) => ({ text: `${l}  ${(ch.data.datasets[0].data[i] / total * 100).toFixed(0)}%`, fillStyle: ch.data.datasets[0].backgroundColor[i], strokeStyle: ch.data.datasets[0].backgroundColor[i], fontColor: '#bfe9f7', index: i })) } }, tooltip: { callbacks: { label: i => `${i.label}: ${i.raw} (${(i.raw / total * 100).toFixed(1)}%)` } } } } }; };
   mk('cPie1', pie('n', U.length)); mk('cPie2', pie('hits', topN));
   const L = rows.slice().sort((a, b) => b.med - a.med);
   mk('cLead', { data: { labels: L.map(s => `${s.sec} (${s.n})`), datasets: [
     { type: 'bar', label: 'Median return %', data: L.map(s => +s.med.toFixed(2)), backgroundColor: L.map(s => s.med >= 0 ? '#22c55e' : '#ef4444'), borderRadius: 3, yAxisID: 'y' },
     { type: 'line', label: 'Hit rate %', data: L.map(s => +s.hit.toFixed(1)), borderColor: '#f5a524', backgroundColor: '#f5a524', pointRadius: 4, tension: .25, yAxisID: 'y2' },
     { type: 'line', label: 'Even spread', data: L.map(() => base * 100), borderColor: '#f5a52466', borderDash: [5, 4], pointRadius: 0, yAxisID: 'y2' }] },
-    options: { maintainAspectRatio: false, interaction: { mode: 'index', intersect: false }, plugins: { legend: { labels: { color: '#e6edf3', boxWidth: 12 } } },
-      scales: { x: { ticks: { maxRotation: 55, minRotation: 45, color: '#e6edf3' }, grid: { display: false } }, y: { ticks: pctTick, grid: { color: '#1b2532' } }, y2: { position: 'right', min: 0, ticks: pctTick, grid: { display: false } } } } });
+    options: { maintainAspectRatio: false, interaction: { mode: 'index', intersect: false }, plugins: { legend: { labels: { color: '#bfe9f7', boxWidth: 12 } } },
+      scales: { x: { ticks: { maxRotation: 55, minRotation: 45, color: '#bfe9f7' }, grid: { display: false } }, y: { ticks: pctTick, grid: { color: '#0f2a3a' } }, y2: { position: 'right', min: 0, ticks: pctTick, grid: { display: false } } } } });
   table($('#tSecs'), [{ k: 'sec', h: 'Sector', l: 1, f: (v) => `<span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:${SECCOL[v]};margin-right:7px"></span>${esc(v)}` },
     { k: 'n', h: 'Stocks' }, { k: 'share', h: '% of universe', f: v => v.toFixed(1) + '%' }, { k: 'hits', h: 'Top-20%' }, { k: 'hit', h: 'Hit rate', f: v => v.toFixed(0) + '%' },
     { k: 'lift', h: 'Lift', f: v => v.toFixed(2) + '×', c: v => v >= 1.2 ? 'up' : v <= .8 ? 'down' : '' }, { k: 'med', h: 'Median', f: pctF, c: pctC }, { k: 'avg', h: 'Average', f: pctF, c: pctC }, { k: 'br', h: '% rising', f: v => v.toFixed(0) + '%' }], rows, { sort: 'med', sortKey: 'secs' });
   const UA = uni().filter(r => r[k] != null && r.r1m != null); const bySec = {}; UA.forEach(r => (bySec[r.s] = bySec[r.s] || []).push(r));
   mk('cScat', { type: 'scatter', data: { datasets: Object.entries(bySec).sort((a, b) => b[1].length - a[1].length).map(([s, list], i) => ({ label: s, data: list.map(r => ({ x: r[k], y: r.r1m, r })), backgroundColor: (i < 10 ? SECCOL[s] : '#64748b') + 'cc', pointRadius: 3.5, pointHoverRadius: 7 })) },
-    options: { maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { boxWidth: 8, color: '#e6edf3', font: { size: 10 } } }, tooltip: { callbacks: { label: i => `${i.raw.r.sym} · ${P} ${fmt(i.raw.x)} · 1M ${fmt(i.raw.y)}` } } },
-      scales: { x: { title: { display: true, text: P + ' return %' }, grid: { color: c => c.tick.value === 0 ? '#4b5b70' : '#1b2532' } }, y: { title: { display: true, text: '1-month return %' }, grid: { color: c => c.tick.value === 0 ? '#4b5b70' : '#1b2532' } } },
+    options: { maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { boxWidth: 8, color: '#bfe9f7', font: { size: 10 } } }, tooltip: { callbacks: { label: i => `${i.raw.r.sym} · ${P} ${fmt(i.raw.x)} · 1M ${fmt(i.raw.y)}` } } },
+      scales: { x: { title: { display: true, text: P + ' return %' }, grid: { color: c => c.tick.value === 0 ? '#4b5b70' : '#0f2a3a' } }, y: { title: { display: true, text: '1-month return %' }, grid: { color: c => c.tick.value === 0 ? '#4b5b70' : '#0f2a3a' } } },
       onClick: (e, els) => { if (els.length) { const p = charts.cScat.data.datasets[els[0].datasetIndex].data[els[0].index]; select(p.r.sym, true); } } } });
   const step = { r1: 1, r5: 2, r15: 3, r1m: 4, r3m: 5, r6m: 10, r1y: 10 }[k];
   const lo = Math.floor(Math.min(...vals) / step) * step, hi = Math.ceil(Math.max(...vals) / step) * step; const bins = []; for (let b = lo; b < hi; b += step) bins.push(b);
   mk('cHist', { type: 'bar', data: { labels: bins.map(b => b + '%'), datasets: [{ data: bins.map(b => vals.filter(x => x >= b && x < b + step).length), backgroundColor: bins.map(b => b + step <= 0 ? '#ef4444' : b >= 0 ? '#22c55e' : '#94a3b8'), barPercentage: 1, categoryPercentage: .95 }] },
-    options: { maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { grid: { display: false } }, y: { title: { display: true, text: 'Stocks' }, grid: { color: '#1b2532' } } } } });
+    options: { maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { grid: { display: false } }, y: { title: { display: true, text: 'Stocks' }, grid: { color: '#0f2a3a' } } } } });
   const groups = {}; uni().forEach(r => (groups[r.s] = groups[r.s] || []).push(r));
   $('#heatmap').innerHTML = Object.entries(groups).sort((a, b) => median(b[1].map(r => r[k])) - median(a[1].map(r => r[k]))).map(([s, list]) => {
     list.sort((a, b) => (b[k] ?? -999) - (a[k] ?? -999)); const m = median(list.map(r => r[k]));
@@ -313,11 +314,11 @@ function renderSectors() {
   const pts = rows.filter(o => o.x != null && o.y != null);
   mk('cRrg', { type: 'bubble', data: { datasets: [{ data: pts.map(o => ({ x: +o.x.toFixed(2), y: +o.y.toFixed(2), r: 4 + Math.sqrt(o.n) * 2, o })), backgroundColor: pts.map(o => col(o) + 'aa'), borderColor: pts.map(col) }] },
     options: { maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: i => `${i.raw.o.sec} (${i.raw.o.n}) · 3M ${fmt(i.raw.x)} · 1M ${fmt(i.raw.y)} vs universe · ${i.raw.o.q}` } } },
-      scales: { x: { title: { display: true, text: '3-month relative return (pts)' }, grid: { color: c => c.tick.value === 0 ? '#5b6b80' : '#1b2532' } }, y: { title: { display: true, text: '1-month relative return (pts)' }, grid: { color: c => c.tick.value === 0 ? '#5b6b80' : '#1b2532' } } } },
+      scales: { x: { title: { display: true, text: '3-month relative return (pts)' }, grid: { color: c => c.tick.value === 0 ? '#5b6b80' : '#0f2a3a' } }, y: { title: { display: true, text: '1-month relative return (pts)' }, grid: { color: c => c.tick.value === 0 ? '#5b6b80' : '#0f2a3a' } } } },
     plugins: [{ id: 'lbl', afterDatasetsDraw(ch) { const c = ch.ctx; c.save(); c.font = '10px Inter'; c.fillStyle = '#cbd5e1'; ch.getDatasetMeta(0).data.forEach((p, i) => { const o = pts[i]; if (o.n >= 4) c.fillText(o.sec, p.x + 6, p.y - 6); }); c.restore(); } }] });
   const sb = rows.filter(o => o.n >= 3).sort((a, b) => b.a50 - a.a50);
   mk('cSecBr', { type: 'bar', data: { labels: sb.map(o => `${o.sec} (${o.n})`), datasets: [{ label: '> 50-day', data: sb.map(o => +o.a50.toFixed(0)), backgroundColor: '#3b82f6' }, { label: '> 200-day', data: sb.map(o => +o.a200.toFixed(0)), backgroundColor: '#f5a524' }] },
-    options: { indexAxis: 'y', maintainAspectRatio: false, plugins: { legend: { labels: { color: '#e6edf3', boxWidth: 10 } } }, scales: { x: { min: 0, max: 100, ticks: pctTick, grid: { color: '#1b2532' } }, y: { ticks: { color: '#e6edf3', font: { size: 10.5 } }, grid: { display: false } } } } });
+    options: { indexAxis: 'y', maintainAspectRatio: false, plugins: { legend: { labels: { color: '#bfe9f7', boxWidth: 10 } } }, scales: { x: { min: 0, max: 100, ticks: pctTick, grid: { color: '#0f2a3a' } }, y: { ticks: { color: '#bfe9f7', font: { size: 10.5 } }, grid: { display: false } } } } });
   const hc = s => v => `" style="background:${heat(v, s)}`;
   table($('#tRot'), [{ k: 'sec', h: 'Sector', l: 1 }, { k: 'n', h: 'Stocks' }, { k: 'q', h: 'Quadrant', l: 1, f: (v, o) => `<span style="color:${col(o)}">${v}</span>` },
     { k: 'r1', h: '1D', f: pctF, c: hc(3) }, { k: 'r5', h: '1W', f: pctF, c: hc(6) }, { k: 'r1m', h: '1M', f: pctF, c: hc(10) }, { k: 'r3m', h: '3M', f: pctF, c: hc(20) },
@@ -409,7 +410,7 @@ function renderOwn() {
   $('#tHouse').querySelectorAll('tbody tr').forEach(tr => { tr.style.cursor = 'pointer'; tr.onclick = () => { const f = tr.cells[0].textContent; st.ownQ = f.split(' ')[0]; $('#hQ').value = st.ownQ; drawH(); $('#tHold').scrollIntoView({ block: 'center' }); }; });
   const bar = (id, k, asc) => { const l = U.filter(r => r[k] != null).sort((a, b) => asc ? a[k] - b[k] : b[k] - a[k]).slice(0, 12);
     mk(id, { type: 'bar', data: { labels: l.map(r => r.sym), datasets: [{ data: l.map(r => r[k]), backgroundColor: asc ? '#ef4444' : '#22c55e', borderRadius: 3 }] },
-      options: { indexAxis: 'y', maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: i => fpp(i.raw) } } }, scales: { x: { grid: { color: '#1b2532' } }, y: { ticks: { color: '#e6edf3', font: { family: "'IBM Plex Mono'" } }, grid: { display: false } } }, onClick: (e, els) => { if (els.length) select(l[els[0].index].sym, true); } } }); };
+      options: { indexAxis: 'y', maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: i => fpp(i.raw) } } }, scales: { x: { grid: { color: '#0f2a3a' } }, y: { ticks: { color: '#bfe9f7', font: { family: "'IBM Plex Mono'" } }, grid: { display: false } } }, onClick: (e, els) => { if (els.length) select(l[els[0].index].sym, true); } } }); };
   bar('cMf', 'dmf'); bar('cFpi', 'dfpi'); bar('cProm', 'dprom', true);
   function drawH() {
     const q = st.ownQ.toLowerCase(), c = $('#hC').value, f = $('#hF').value;
@@ -485,7 +486,7 @@ function select(sym, scroll) {
   const c = r.spark || [], n = c.length, sm = (w, i) => i + 1 >= w ? c.slice(i + 1 - w, i + 1).reduce((a, b) => a + b, 0) / w : null;
   const lbl = c.map((_, i) => i - n + 1);
   mk('cStk', { type: 'line', data: { labels: lbl, datasets: [{ data: c, borderColor: (r.r6m ?? 0) >= 0 ? '#22c55e' : '#ef4444', pointRadius: 0, borderWidth: 1.6, label: 'Close' }, { data: c.map((_, i) => sm(20, i)), borderColor: '#3b82f6', pointRadius: 0, borderWidth: 1, label: '20D' }, { data: c.map((_, i) => sm(50, i)), borderColor: '#f5a524', pointRadius: 0, borderWidth: 1, label: '50D' }] },
-    options: { maintainAspectRatio: false, animation: false, plugins: { legend: { display: false }, tooltip: { mode: 'index', intersect: false, callbacks: { title: i => `${-i[0].label} sessions ago` } } }, scales: { x: { display: false }, y: { grid: { color: '#1b2532' }, ticks: { maxTicksLimit: 5 } } } } });
+    options: { maintainAspectRatio: false, animation: false, plugins: { legend: { display: false }, tooltip: { mode: 'index', intersect: false, callbacks: { title: i => `${-i[0].label} sessions ago` } } }, scales: { x: { display: false }, y: { grid: { color: '#0f2a3a' }, ticks: { maxTicksLimit: 5 } } } } });
   const vv = r.vspark || [];
   mk('cStkV', { type: 'bar', data: { labels: vv.map((_, i) => i), datasets: [{ data: vv, backgroundColor: '#64748b' }] }, options: { maintainAspectRatio: false, animation: false, plugins: { legend: { display: false }, tooltip: { enabled: false } }, scales: { x: { display: false }, y: { display: false } } } });
   renderTerm();
@@ -493,5 +494,4 @@ function select(sym, scroll) {
 }
 
 // ------------------------------------------------------------------ boot
-const h0 = location.hash.slice(1); if (h0 && document.querySelector(`#tabs button[data-t="${h0}"]`)) document.querySelector(`#tabs button[data-t="${h0}"]`).click();
-loadAll(true);
+// boot sequence lives in jarvis.js
