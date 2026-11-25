@@ -591,6 +591,13 @@ def houses(holders):
     return agg
 
 
+def norm(name):
+    """Match the same holder across quarters despite case, punctuation and 'A/C' wording differences."""
+    u = re.sub(r"[^A-Z0-9 ]", " ", html.unescape(name).upper())
+    u = re.sub(r"\b(A C|AC|LTD|LIMITED|THE|TRUSTEE|TRUSTEES|COMPANY|CO|PVT|PRIVATE|MUTUAL FUND|MF)\b", " ", u)
+    return re.sub(r"\s+", "", u)[:34]
+
+
 def ownership_out(univ):
     out = {}
     for sym in univ:
@@ -610,12 +617,13 @@ def ownership_out(univ):
                 rec["prev_date"] = prv["date"]
                 rec["chg"] = {k: r((cur["detail"].get(k) or 0) - (prv["detail"].get(k) or 0), 2)
                               for k in CATS if k != "public"}
-                ph = {h["n"]: h["p"] for h in prv["detail"]["holders"]}
-                ch = {h["n"]: h["p"] for h in cur["detail"]["holders"]}
+                ph = {norm(h["n"]): h["p"] for h in prv["detail"]["holders"]}
+                ch = {norm(h["n"]): h["p"] for h in cur["detail"]["holders"]}
                 for h in rec["holders"]:
-                    h["d"] = r(h["p"] - ph[h["n"]], 2) if h["n"] in ph else None   # None = new above 1%
+                    k = norm(h["n"])
+                    h["d"] = r(h["p"] - ph[k], 2) if k in ph else None   # None = new above 1%
                 rec["exited"] = [{"n": h["n"], "c": h["c"], "p": h["p"]}
-                                 for h in prv["detail"]["holders"] if h["n"] not in ch][:10]
+                                 for h in prv["detail"]["holders"] if norm(h["n"]) not in ch][:10]
                 hc, hp = houses(cur["detail"]["holders"]), houses(prv["detail"]["holders"])
                 rec["houses"] = sorted([{"f": f, "p": r(hc.get(f, 0.0), 2), "d": r(hc.get(f, 0.0) - hp.get(f, 0.0), 2),
                                          "new": f not in hp, "gone": f not in hc}
