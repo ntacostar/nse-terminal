@@ -1,5 +1,5 @@
 {
- "fetched": "2026-11-25",
+ "fetched": "2026-11-26",
  "items": [
   {
    "symbol": "WEBELSOLAR",
@@ -459,6 +459,11 @@
   {
    "symbol": "INTERARCH",
    "subject": "Face Value Split (Sub-Division) - From Rs 10/- Per Share To Rs 2/- Per Share",
+   "exDate": "30-Nov-2026"
+  },
+  {
+   "symbol": "TECHM",
+   "subject": "Bonus 1:1",
    "exDate": "30-Nov-2026"
   }
  ]
